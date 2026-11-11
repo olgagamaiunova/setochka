@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Сеточка: схемы для филейного вязания</title>
+<meta name="description" content="Редактор схем для филейного вязания: рисуй по клеткам, делай схему из картинки или текста и вяжи ряд за рядом. На обратных рядах схема отражается сама.">
+<meta name="theme-color" content="#EDF1F8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect width='26' height='26' fill='%23fff'/%3E%3Cg fill='%23131C3A'%3E%3Crect x='1' y='1' width='7' height='7'/%3E%3Crect x='18' y='1' width='7' height='7'/%3E%3Crect x='9.5' y='9.5' width='7' height='7'/%3E%3Crect x='1' y='18' width='7' height='7'/%3E%3Crect x='18' y='18' width='7' height='7'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Unbounded:wght@600;700&family=Rubik+Mono+One&family=Playfair+Display:wght@700&family=Kelly+Slab&family=Lobster&family=Pacifico&family=Ruslan+Display&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+/* Идея: белая нить и синька. Светлая тема: тёмные клетки на бумаге.
+   Тёмная тема: белое кружево на тёмно-синей ткани (не инверсия, а другой материал). */
+:root{
+  --bg:#EDF1F8; --surface:#FFFFFF; --ink:#131C3A; --muted:#566184; --line:#CED6E6;
+  --accent:#2742D6; --accent-ink:#FFFFFF; --accent-soft:#E3E8FB;
+  --paper:#FFFFFF; --cell:#131C3A; --grid:#E1E6F1; --grid5:#B9C3DA; --done:#AEB7CF;
+  --band:rgba(39,66,214,.16); --danger:#B3261E;
+  --display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --body:"Golos Text",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0A0F25; --surface:#131A38; --ink:#EDF0FA; --muted:#9CA7CB; --line:#2A3360;
+    --accent:#93A6FF; --accent-ink:#0A0F25; --accent-soft:#1D2752;
+    --paper:#0F1533; --cell:#F3F5FC; --grid:#1F2850; --grid5:#3A4680; --done:#4C578A;
+    --band:rgba(147,166,255,.22); --danger:#FF8A80;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0A0F25; --surface:#131A38; --ink:#EDF0FA; --muted:#9CA7CB; --line:#2A3360;
+  --accent:#93A6FF; --accent-ink:#0A0F25; --accent-soft:#1D2752;
+  --paper:#0F1533; --cell:#F3F5FC; --grid:#1F2850; --grid5:#3A4680; --done:#4C578A;
+  --band:rgba(147,166,255,.22); --danger:#FF8A80;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:400 15px/1.45 var(--body);
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Шапка */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;flex:none}
+.brand{display:flex;align-items:center;gap:10px;font:600 18px/1 var(--display);letter-spacing:-.01em}
+.brand svg{display:block}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;padding:8px 16px;border-radius:999px;cursor:pointer;font-weight:500;min-height:38px;
+  transition:background .18s ease-out,color .18s ease-out}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+
+/* Раскладка */
+.work{flex:1;min-height:0;display:flex;flex-direction:column}
+.stage{flex:1;min-width:0;min-height:260px;display:flex;flex-direction:column}
+.canvasarea{position:relative;flex:1;min-height:0;display:flex}
+.scroller{flex:1;overflow:auto;display:flex;padding:8px;-webkit-overflow-scrolling:touch}
+/* Рамка: схема в центре, по четырём сторонам кнопки «добавить / убрать ряд или столбец» */
+.frame{margin:auto;display:grid;grid-template-columns:auto auto auto;grid-template-areas:". t ." "l c r" ". b .";gap:3px;align-items:center;justify-items:center}
+.frame.noedge{gap:0}
+.frame.noedge .grip{display:none}
+.flipper{grid-area:c;line-height:0;border-radius:6px;background:var(--paper);box-shadow:0 0 0 1px var(--line)}
+/* Края схемы можно тянуть, как края артборда: так добавляются и убираются ряды и столбцы */
+.grip{border:0;background:none;padding:0;display:grid;place-items:center;touch-action:none;border-radius:8px}
+.grip.t{grid-area:t}.grip.b{grid-area:b}.grip.l{grid-area:l}.grip.r{grid-area:r}
+.grip.t,.grip.b{justify-self:stretch;height:20px;cursor:ns-resize}
+.grip.l,.grip.r{align-self:stretch;width:20px;cursor:ew-resize}
+.grip i{display:block;border-radius:99px;background:var(--grid5);transition:background .15s ease-out,transform .15s ease-out}
+.grip.t i,.grip.b i{width:52px;height:5px}
+.grip.l i,.grip.r i{width:5px;height:52px}
+.grip:hover i,.grip.drag i,.grip:focus-visible i{background:var(--accent)}
+.grip.t:hover i,.grip.b:hover i,.grip.t.drag i,.grip.b.drag i{transform:scaleX(1.25)}
+.grip.l:hover i,.grip.r:hover i,.grip.l.drag i,.grip.r.drag i{transform:scaleY(1.25)}
+.badge{position:fixed;z-index:15;left:0;top:0;background:var(--ink);color:var(--bg);padding:4px 8px;border-radius:6px;font:600 13px/1.2 var(--body);pointer-events:none;white-space:nowrap}
+
+/* Панель инструментов: на десктопе сверху, на телефоне снизу, листается вбок */
+.tools{flex:none;order:3;background:var(--surface);border-top:1px solid var(--line);overflow-x:auto;display:flex;padding:6px 8px;scrollbar-width:thin}
+.tin{display:flex;margin:0 auto}
+.tg{display:flex;gap:2px}
+.tg+.tg{margin-left:8px;padding-left:8px;border-left:1px solid var(--line)}
+.tbtn{display:grid;justify-items:center;align-content:center;gap:4px;min-width:62px;min-height:52px;padding:6px 8px;border:0;border-radius:10px;background:none;cursor:pointer;
+  font:500 11px/1.1 var(--body);white-space:nowrap;transition:background .15s ease-out,transform .12s ease-out}
+.tbtn svg{width:20px;height:20px}
+.tbtn:hover{background:var(--accent-soft)}
+.tbtn:active{transform:scale(.95)}
+.tbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.tbtn.mode[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.tbtn[disabled]{opacity:.35;cursor:default;background:none;transform:none}
+.tbtn.danger{color:var(--danger)}
+canvas#cv{display:block;border-radius:6px;cursor:crosshair}
+canvas#cv.pan{cursor:default}
+.zoom{position:absolute;right:12px;bottom:12px;display:flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.zoom button{border:0;background:none;width:40px;height:40px;font-size:20px;cursor:pointer}
+.zoom button+button{border-left:1px solid var(--line)}
+.empty{position:absolute;left:12px;bottom:12px;right:108px;max-width:320px;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px;font-size:14px;color:var(--muted)}
+
+.panel{flex:none;height:clamp(250px,44%,340px);overflow:auto;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px 16px}
+.group{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.group+.group{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);cursor:pointer;font-weight:500;font-size:14px;transition:transform .12s ease-out,background .15s ease-out}
+.btn:hover{background:var(--accent-soft)}
+.btn:active{transform:scale(.97)}
+.btn[disabled]{opacity:.4;cursor:default;background:var(--surface);transform:none}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{border-color:transparent}
+.btn.danger{color:var(--danger)}
+.btn svg{flex:none}
+.hint{flex:none;background:var(--accent-soft);border-radius:10px;padding:8px 12px;margin:8px 12px 0;font-size:14px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.hint p{margin:0;flex:1 1 200px}
+.switch{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;min-height:40px}
+.switch input{appearance:none;-webkit-appearance:none;width:40px;height:24px;border-radius:999px;background:var(--line);position:relative;flex:none;cursor:pointer;margin:0;transition:background .18s ease-out}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--surface);transition:transform .18s ease-out}
+.switch input:checked{background:var(--accent)}
+.switch input:checked::after{transform:translateX(16px)}
+
+/* Режим «Вяжу» */
+.rowhead{display:flex;align-items:baseline;gap:10px}
+.rownum{font:700 34px/1.05 var(--display);letter-spacing:-.02em}
+.rowof{color:var(--muted)}
+.dir{margin:12px 0 10px;max-width:46ch}
+.runs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;padding:0;list-style:none}
+.runs li{min-width:34px;height:34px;padding:0 8px;border-radius:6px;display:grid;place-items:center;font:600 16px/1 var(--body);font-variant-numeric:tabular-nums;
+  border:1.5px solid var(--cell)}
+.runs li.f{background:var(--cell);color:var(--paper)}
+.runs li.e{background:var(--paper);color:var(--cell);border-style:dashed}
+.legend{color:var(--muted);font-size:13px;margin:0 0 12px}
+.knitnav{display:flex;gap:8px;margin-top:12px}
+.knitnav .primary{flex:1;justify-content:center;min-height:48px;font-size:16px}
+.knitnav .btn:not(.primary){min-height:48px}
+
+/* Диалоги */
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);padding:20px;width:min(440px,calc(100vw - 24px));max-height:calc(100% - 24px)}
+dialog::backdrop{background:rgba(10,15,37,.55)}
+dialog h2{font:600 18px/1.2 var(--display);letter-spacing:-.01em;margin:0 0 8px}
+.btn.soft{background:var(--accent-soft);border-color:transparent}
+.btn.soft:hover{filter:brightness(.96)}
+#txIn{display:block;width:100%;min-height:64px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink);font:inherit;resize:vertical}
+.fonts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:10px 0}
+.fonts button{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:6px 2px;cursor:pointer;min-height:58px;display:grid;gap:2px;place-items:center;overflow:hidden}
+.fonts button b{font-size:21px;line-height:1.1}
+.fonts button small{font:400 11px/1.1 var(--body);color:var(--muted)}
+.fonts button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:var(--accent-soft)}
+.note{font-size:13px;color:var(--muted);margin:6px 0 0}
+.preview span{color:var(--muted);font-size:14px;text-align:center}
+dialog p{margin:0 0 12px;color:var(--muted);font-size:14px}
+.field{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0;font-size:14px}
+.field input[type=number]{width:84px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+.field input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+.field output{width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.sides{display:grid;grid-template-columns:1fr auto 1fr;grid-template-areas:". t ." "l c r" ". b .";gap:10px;align-items:center;justify-items:center;margin:14px 0 6px}
+.sides label{display:grid;gap:4px;justify-items:center;font-size:13px;color:var(--muted)}
+.sides input{width:76px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--paper);text-align:center;font-size:15px}
+.sides .st{grid-area:t}.sides .sl{grid-area:l}.sides .sr{grid-area:r}.sides .sb{grid-area:b}
+.sides .sc{grid-area:c;display:grid;justify-items:center;gap:2px;padding:14px 16px;border:1.5px solid var(--grid5);border-radius:8px;min-width:108px;
+  background:repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 9px),repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 9px),var(--paper)}
+.sides .sc b{font:600 16px/1.2 var(--display);white-space:nowrap}
+.sides .sc small{font-size:12px;color:var(--muted);white-space:nowrap}
+.drop{border:1.5px dashed var(--grid5);border-radius:12px;padding:22px 14px;text-align:center;cursor:pointer;display:block}
+.drop.over{background:var(--accent-soft);border-color:var(--accent)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.drop:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.preview{display:flex;justify-content:center;background:var(--bg);border-radius:10px;padding:10px;margin:10px 0;min-height:120px;align-items:center}
+.preview canvas{max-width:100%;image-rendering:pixelated;background:#fff}
+.err{color:var(--danger);font-size:14px;margin:8px 0 0}
+.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;display:flex;gap:12px;align-items:center;font-size:14px;
+  transition:opacity .2s ease-out,transform .2s ease-out;z-index:20;max-width:calc(100vw - 24px)}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{background:none;border:0;color:inherit;font-weight:600;text-decoration:underline;cursor:pointer;padding:4px}
+[hidden]{display:none!important}
+
+@media (min-width:900px){
+  .work{flex-direction:row}
+  .tools{order:0;border-top:0;border-bottom:1px solid var(--line);padding:6px 20px}
+  .panel{width:372px;height:auto;border-top:0;border-left:1px solid var(--line);padding:20px}
+  .scroller{padding:20px}
+  .top{padding:14px 20px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><g fill="currentColor"><rect x="1" y="1" width="7" height="7"/><rect x="18" y="1" width="7" height="7"/><rect x="9.5" y="9.5" width="7" height="7"/><rect x="1" y="18" width="7" height="7"/><rect x="18" y="18" width="7" height="7"/></g></svg>
+    Сеточка
+  </div>
+  <div class="seg" role="group" aria-label="Режим">
+    <button id="modeDraw" aria-pressed="true">Рисую</button>
+    <button id="modeKnit" aria-pressed="false">Вяжу</button>
+  </div>
+</header>
+
+<main class="work">
+  <section class="stage">
+    <div class="tools" id="tools" role="toolbar" aria-label="Инструменты"><div class="tin">
+      <div class="tg">
+        <button class="tbtn" id="toolPen" title="Рисовать по клеткам" aria-label="Рисовать по клеткам" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l1-4.5L13.5 3l3.5 3.5L7.5 16z"/><path d="M11.5 5l3.5 3.5"/></svg><span>Рисовать</span></button>
+        <button class="tbtn" id="toolHand" title="Двигать схему, не рисуя" aria-label="Двигать схему, не рисуя" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v16M2 10h16M10 2L7.5 4.5M10 2l2.5 2.5M10 18l-2.5-2.5M10 18l2.5-2.5M2 10l2.5-2.5M2 10l2.5 2.5M18 10l-2.5-2.5M18 10l-2.5 2.5"/></svg><span>Двигать</span></button>
+        <button class="tbtn mode" id="sym" title="Рисовать зеркально: что рисуешь слева, сразу появляется справа" aria-label="Рисовать зеркально: что рисуешь слева, сразу появляется справа" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v16" stroke-dasharray="2 2.5"/><rect x="2.5" y="6" width="4.5" height="8" fill="currentColor"/><rect x="13" y="6" width="4.5" height="8" fill="currentColor"/></svg><span>Зеркально</span></button>
+      </div>
+      <div class="tg">
+        <button class="tbtn" id="flipH" title="Отразить по горизонтали" aria-label="Отразить по горизонтали"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v16" stroke-dasharray="2 2.5"/><path d="M7.5 5L2 15h5.5z" fill="currentColor"/><path d="M12.5 5L18 15h-5.5z"/></svg><span>Отразить ↔</span></button>
+        <button class="tbtn" id="flipV" title="Отразить по вертикали" aria-label="Отразить по вертикали"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h16" stroke-dasharray="2 2.5"/><path d="M5 7.5L15 2v5.5z" fill="currentColor"/><path d="M5 12.5L15 18v-5.5z"/></svg><span>Отразить ↕</span></button>
+        <button class="tbtn" id="invert" title="Поменять местами полные и пустые клетки" aria-label="Поменять местами полные и пустые клетки"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="1.5"/><path d="M3.5 3.5h6.5v13H3.5z" fill="currentColor" stroke="none"/></svg><span>Инверсия</span></button>
+      </div>
+      <div class="tg">
+        <button class="tbtn" id="undo" title="Отменить (Ctrl+Z)" aria-label="Отменить (Ctrl+Z)" disabled><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L3 8l4 4"/><path d="M3 8h8.5a4.5 4.5 0 010 9H8"/></svg><span>Отменить</span></button>
+        <button class="tbtn" id="redo" title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть (Ctrl+Shift+Z)" disabled><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4l4 4-4 4"/><path d="M17 8H8.5a4.5 4.5 0 000 9H12"/></svg><span>Вернуть</span></button>
+      </div>
+      <div class="tg">
+        <button class="tbtn" id="resize" title="Задать точный размер схемы" aria-label="Задать точный размер схемы"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="1.5"/><path d="M3 8h14M3 12.5h14M8 3v14M12.5 3v14" stroke-width="1"/></svg><span id="sizeLabel"></span></button>
+        <button class="tbtn" id="fromImage" title="Сделать схему из картинки" aria-label="Сделать схему из картинки"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5"/><circle cx="7" cy="8" r="1.4"/><path d="M3 14.5l4.5-4 3 2.5 3-3 4 4"/></svg><span>Из картинки</span></button>
+        <button class="tbtn" id="fromText" title="Сделать схему из текста" aria-label="Сделать схему из текста"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6V4h12v2M10 4v12M7.5 16h5"/></svg><span>Из текста</span></button>
+      </div>
+      <div class="tg">
+        <button class="tbtn" id="exportPng" title="Скачать схему как PNG" aria-label="Скачать схему как PNG"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3v9M6 8.5l4 4 4-4M3.5 16.5h13"/></svg><span>Скачать PNG</span></button>
+        <button class="tbtn danger" id="clear" title="Очистить схему" aria-label="Очистить схему"><svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6M8.5 9v5M11.5 9v5"/></svg><span>Очистить</span></button>
+      </div>
+    </div></div>
+    <div class="hint" id="hint" hidden>
+      <p>Это пример схемы. Рисуй поверх или начни с чистой.</p>
+      <button class="btn" id="hintClear">Начать с чистой</button>
+      <button class="btn ghost" id="hintOk">Понятно</button>
+    </div>
+    <div class="canvasarea">
+      <div class="scroller" id="scroller">
+        <div class="frame" id="frame">
+          <button class="grip t" data-side="top" title="Потяни, чтобы добавить или убрать ряды сверху" aria-label="Верхний край схемы. Потяни или нажимай стрелки вверх и вниз, чтобы добавить или убрать ряды"><i></i></button>
+          <button class="grip l" data-side="left" title="Потяни, чтобы добавить или убрать столбцы слева" aria-label="Левый край схемы. Потяни или нажимай стрелки влево и вправо, чтобы добавить или убрать столбцы"><i></i></button>
+          <div class="flipper" id="flipper"><canvas id="cv" tabindex="0" role="img"></canvas></div>
+          <button class="grip r" data-side="right" title="Потяни, чтобы добавить или убрать столбцы справа" aria-label="Правый край схемы. Потяни или нажимай стрелки влево и вправо, чтобы добавить или убрать столбцы"><i></i></button>
+          <button class="grip b" data-side="bottom" title="Потяни, чтобы добавить или убрать ряды снизу" aria-label="Нижний край схемы. Потяни или нажимай стрелки вверх и вниз, чтобы добавить или убрать ряды"><i></i></button>
+        </div>
+      </div>
+      <div class="empty" id="empty" hidden>Схема пустая. Нажимай на клетки, загрузи картинку или набери текст.</div>
+      <div class="zoom" role="group" aria-label="Масштаб">
+        <button id="zoomOut" aria-label="Мельче">−</button>
+        <button id="zoomIn" aria-label="Крупнее">+</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Вяжу: кнопки стоят сразу под номером ряда, чтобы не прыгать, когда меняется текст ниже -->
+  <aside class="panel" id="knitPanel" hidden>
+    <div class="rowhead" aria-live="polite"><span class="rownum" id="rowNum"></span><span class="rowof" id="rowOf"></span></div>
+    <div class="knitnav">
+      <button class="btn" id="rowPrev">Назад</button>
+      <button class="btn primary" id="rowNext">Ряд готов</button>
+    </div>
+    <p class="dir" id="dirText" aria-live="polite"></p>
+    <ol class="runs" id="runs" aria-label="Клетки по порядку вязания"></ol>
+    <p class="legend" id="legend"></p>
+    <div class="group">
+      <label class="switch"><input type="checkbox" id="autoFlip" checked> Отражать схему на обратных рядах</label>
+      <label class="switch"><input type="checkbox" id="ltrFirst"> Первый ряд слева направо (для левшей)</label>
+    </div>
+  </aside>
+</main>
+
+<!-- Размер -->
+<dialog id="dlgSize" aria-labelledby="dlgSizeT">
+  <h2 id="dlgSizeT">Размер схемы</h2>
+  <p>Сколько рядов и столбцов добавить с каждой стороны. Число с минусом убирает: −2 сверху срежет два верхних ряда.</p>
+  <div class="sides">
+    <label class="st">Сверху <input type="number" id="adT" value="0" inputmode="numeric"></label>
+    <label class="sl">Слева <input type="number" id="adL" value="0" inputmode="numeric"></label>
+    <div class="sc" aria-live="polite"><b id="sizeNew"></b><small id="sizeOld"></small></div>
+    <label class="sr">Справа <input type="number" id="adR" value="0" inputmode="numeric"></label>
+    <label class="sb">Снизу <input type="number" id="adB" value="0" inputmode="numeric"></label>
+  </div>
+  <p class="err" id="sizeErr" hidden>Каждая сторона схемы должна быть от 3 до 400 клеток.</p>
+  <div class="actions">
+    <button class="btn ghost" id="sizeCancel">Отмена</button>
+    <button class="btn primary" id="sizeOk">Изменить размер</button>
+  </div>
+</dialog>
+
+<!-- Из картинки -->
+<dialog id="dlgImg" aria-labelledby="dlgImgT">
+  <h2 id="dlgImgT">Схема из картинки</h2>
+  <p>Лучше всего получаются контрастные силуэты и чёрно-белые рисунки. Фото с полутонами придётся дорисовать руками.</p>
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="image/*">
+    <span id="dropText">Выбери файл или перетащи его сюда</span>
+  </label>
+  <p class="err" id="imgErr" hidden></p>
+  <div id="imgControls" hidden>
+    <div class="preview"><canvas id="pv" aria-label="Предпросмотр схемы" role="img"></canvas></div>
+    <label class="field">Ширина <input type="range" id="imW" min="8" max="240" value="40"><output id="imWo"></output></label>
+    <label class="field">Порог <input type="range" id="imT" min="1" max="254" value="128"><output id="imTo"></output></label>
+    <label class="switch"><input type="checkbox" id="imInv"> Поменять местами полные и пустые</label>
+    <label class="switch"><input type="checkbox" id="imTrim" checked> Обрезать пустые поля</label>
+    <label class="switch"><input type="checkbox" id="imClean" checked> Убрать одиночные клетки</label>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="imgCancel">Отмена</button>
+    <button class="btn primary" id="imgOk" disabled>Сделать схему</button>
+  </div>
+</dialog>
+
+<!-- Из текста -->
+<dialog id="dlgTxt" aria-labelledby="dlgTxtT">
+  <h2 id="dlgTxtT">Схема из текста</h2>
+  <p>Имя, дата, короткая фраза. Новая строка в поле станет новой строкой в схеме.</p>
+  <textarea id="txIn" aria-label="Текст для схемы" placeholder="Например: Оля" maxlength="80"></textarea>
+  <div class="fonts" id="fonts" role="group" aria-label="Шрифт"></div>
+  <input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2" hidden>
+  <div class="preview"><canvas id="tpv" role="img" hidden></canvas><span id="txEmpty">Напиши текст, и здесь появится схема</span></div>
+  <p class="err" id="txErr" hidden></p>
+  <label class="field">Размер букв <input type="range" id="txS" min="6" max="48" value="14"><output id="txSo"></output></label>
+  <label class="field" id="txWrow">Толщина линий <input type="range" id="txW" min="25" max="75" value="50"><output></output></label>
+  <label class="field">Поля вокруг <input type="range" id="txP" min="0" max="5" value="1"><output id="txPo"></output></label>
+  <p class="note" id="txNote" hidden></p>
+  <div class="actions">
+    <button class="btn ghost" id="txCancel">Отмена</button>
+    <button class="btn primary" id="txOk" disabled>Сделать схему</button>
+  </div>
+</dialog>
+
+<div class="badge" id="sizeBadge" hidden></div>
+<div class="toast" id="toast" role="status"><span id="toastText"></span><button id="toastAct" hidden></button></div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const KEY = 'setochka:v1';
+const MAX = 400;                    // предел стороны схемы: всё полотно рисуется одним холстом
+const M = 26;                       // поле под номера рядов и столбцов
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const plural = (n, f) => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? f[0] : a >= 2 && a <= 4 && (b < 10 || b >= 20) ? f[1] : f[2]; };
+
+/* ---------- Состояние ---------- */
+// cells: строка 0 сверху. Нумерация как в вязании: ряды снизу вверх, столбцы справа налево.
+const S = { w: 19, h: 21, cells: null, mode: 'draw', tool: 'pen', sym: false,
+            knitRow: 1, autoFlip: true, ltrFirst: false, hintSeen: false };
+let cs = 24, userZoom = false, cursor = null, undoStack = [], redoStack = [];
+
+function sample() {
+  const w = 19, h = 21, a = new Uint8Array(w * h);
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++)
+    if ((r < 2 || r >= h - 2 || c < 2 || c >= w - 2) && (r + c) % 2 === 0) a[r * w + c] = 1;
+  const heart = ['.##...##.', '####.####', '#########', '#########', '.#######.', '..#####..', '...###...', '....#....'];
+  heart.forEach((row, i) => [...row].forEach((ch, j) => { if (ch === '#') a[(6 + i) * w + 5 + j] = 1; }));
+  return { w, h, cells: a };
+}
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (d && d.w * d.h === d.cells.length) {
+      Object.assign(S, { w: d.w, h: d.h, cells: Uint8Array.from(d.cells, ch => +ch), knitRow: d.knitRow || 1,
+        autoFlip: d.autoFlip !== false, ltrFirst: !!d.ltrFirst, hintSeen: !!d.hintSeen, mode: d.mode === 'knit' ? 'knit' : 'draw' });
+      S.knitRow = clamp(S.knitRow, 1, S.h + 1);
+      return;
+    }
+  } catch (e) { /* хранилище недоступно или пусто: начинаем с примера */ }
+  Object.assign(S, sample());
+}
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ w: S.w, h: S.h, cells: Array.from(S.cells).join(''), knitRow: S.knitRow,
+      autoFlip: S.autoFlip, ltrFirst: S.ltrFirst, hintSeen: S.hintSeen, mode: S.mode }));
+  } catch (e) {}
+}
+
+/* ---------- История ---------- */
+const snap = () => ({ w: S.w, h: S.h, cells: S.cells.slice() });
+function pushHistory() { undoStack.push(snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncHistory(); }
+function restore(s) { S.w = s.w; S.h = s.h; S.cells = s.cells; S.knitRow = clamp(S.knitRow, 1, S.h + 1); afterChange(true); }
+function undo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); syncHistory(); }
+function redo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); syncHistory(); }
+function syncHistory() { $('undo').disabled = !undoStack.length; $('redo').disabled = !redoStack.length; }
+
+/* ---------- Отрисовка ---------- */
+function palette() {
+  const st = getComputedStyle(document.documentElement), g = n => st.getPropertyValue(n).trim();
+  return { paper: g('--paper'), cell: g('--cell'), grid: g('--grid'), grid5: g('--grid5'), done: g('--done'),
+           band: g('--band'), accent: g('--accent'), muted: g('--muted') };
+}
+const PRINT = { paper: '#fff', cell: '#111', grid: '#ddd', grid5: '#999', done: '#111', band: 'transparent', accent: '#111', muted: '#333' };
+
+// Обратный ряд в режиме «Вяжу»: показываем схему зеркально, как полотно после поворота.
+const isMirrored = () => S.mode === 'knit' && S.autoFlip && S.knitRow <= S.h && S.knitRow % 2 === 0;
+// В какую сторону идёт ряд k на исходной (неотражённой) схеме
+const rowIsRTL = k => (k % 2 === 1) ? !S.ltrFirst : S.ltrFirst;
+
+function drawChart(canvas, o) {
+  const { size, pal, mirrored, knit } = o, w = S.w, h = S.h;
+  const W = w * size + 2 * M, H = h * size + 2 * M;
+  const dpr = Math.min(o.dpr, Math.sqrt(16e6 / (W * H)));   // большие схемы: не упираемся в предел холста браузера
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  if (o.css) { canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; }
+  const x = canvas.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.fillStyle = pal.paper; x.fillRect(0, 0, W, H);
+  const curR = knit ? h - knit : -1;          // индекс строки текущего ряда
+  if (knit && knit <= h) { x.fillStyle = pal.band; x.fillRect(0, M + curR * size, W, size); }
+  // клетки
+  for (let r = 0; r < h; r++) {
+    x.fillStyle = knit && r > curR ? pal.done : pal.cell;
+    for (let c = 0; c < w; c++) if (S.cells[r * w + c]) {
+      const dc = mirrored ? w - 1 - c : c;
+      x.fillRect(M + dc * size, M + r * size, size, size);
+    }
+  }
+  // сетка: каждая пятая линия от точки отсчёта заметнее, чтобы проще считать
+  const origRight = !mirrored;
+  for (let i = 0; i <= w; i++) {
+    const n = origRight ? w - i : i, strong = n % 5 === 0 || i === 0 || i === w;
+    x.fillStyle = strong ? pal.grid5 : pal.grid; x.fillRect(M + i * size - .5, M, 1, h * size);
+  }
+  for (let j = 0; j <= h; j++) {
+    const n = h - j, strong = n % 5 === 0 || j === 0 || j === h;
+    x.fillStyle = strong ? pal.grid5 : pal.grid; x.fillRect(M, M + j * size - .5, w * size, 1);
+  }
+  // номера
+  const every = size >= 15 ? 1 : 5, fs = Math.min(11, Math.max(9, size * .55));
+  x.font = `500 ${fs}px "Golos Text", system-ui, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = pal.muted;
+  for (let c = 0; c < w; c++) {
+    const n = w - c; if (n !== 1 && n % every) continue;
+    const dc = mirrored ? w - 1 - c : c, cx = M + dc * size + size / 2;
+    x.fillText(n, cx, M / 2); x.fillText(n, cx, H - M / 2);
+  }
+  for (let r = 0; r < h; r++) {
+    const n = h - r, cy = M + r * size + size / 2;
+    if (r === curR) {
+      // стрелка показывает, с какой стороны начинать ряд
+      const startRight = mirrored ? !rowIsRTL(knit) : rowIsRTL(knit);
+      x.fillStyle = pal.accent; x.font = `600 ${fs + 1}px "Golos Text", system-ui, sans-serif`;
+      const ax = startRight ? W - M / 2 : M / 2, d = startRight ? -1 : 1, t = 6;
+      x.beginPath(); x.moveTo(ax + d * t, cy); x.lineTo(ax - d * t, cy - t); x.lineTo(ax - d * t, cy + t); x.closePath(); x.fill();
+      x.fillText(n, startRight ? M / 2 : W - M / 2, cy);
+      x.fillStyle = pal.muted; x.font = `500 ${fs}px "Golos Text", system-ui, sans-serif`;
+      continue;
+    }
+    if (n !== 1 && n % every) continue;
+    x.fillText(n, M / 2, cy); x.fillText(n, W - M / 2, cy);
+  }
+  // пока тянем край: подсвечиваем добавленную полосу, чтобы было видно, с какой стороны она появилась
+  if (o.hi) { const n = o.hi.n * size, sd = o.hi.side; x.fillStyle = pal.band;
+    if (sd === 'top') x.fillRect(M, M, w * size, n); else if (sd === 'bottom') x.fillRect(M, H - M - n, w * size, n);
+    else if (sd === 'left') x.fillRect(M, M, n, h * size); else x.fillRect(W - M - n, M, n, h * size); }
+  // ось зеркального рисования
+  if (o.axis) { x.strokeStyle = pal.accent; x.lineWidth = 2; x.setLineDash([6, 5]); x.beginPath();
+    x.moveTo(M + w * size / 2, M - 6); x.lineTo(M + w * size / 2, H - M + 6); x.stroke(); x.setLineDash([]); }
+  // курсор для клавиатуры
+  if (o.cursor) {
+    x.strokeStyle = pal.accent; x.lineWidth = 2.5;
+    x.strokeRect(M + o.cursor.c * size + 1.5, M + o.cursor.r * size + 1.5, size - 3, size - 3);
+  }
+}
+
+const cv = $('cv'), scroller = $('scroller'), flipper = $('flipper');
+function fit() {
+  if (userZoom) return;
+  const e = S.mode === 'draw' ? 48 : 0;      // место под кнопки по краям схемы
+  const aw = scroller.clientWidth - 16 - e, ah = scroller.clientHeight - 16 - e;
+  cs = clamp(Math.floor(Math.min((aw - 2 * M) / S.w, (ah - 2 * M) / S.h)), 10, 34);
+}
+function render() {
+  drawChart(cv, { size: cs, pal: palette(), mirrored: isMirrored(), knit: S.mode === 'knit' ? S.knitRow : 0,
+    dpr: Math.min(window.devicePixelRatio || 1, 3), css: true, axis: S.mode === 'draw' && S.sym, hi: grip && grip.n > 0 ? grip : null,
+    cursor: S.mode === 'draw' && document.activeElement === cv ? cursor : null });
+}
+function afterChange(refit) {
+  if (refit) fit();
+  $('sizeLabel').textContent = `${S.w} × ${S.h}`;
+  $('empty').hidden = !(S.mode === 'draw' && !S.cells.some(Boolean));
+  cv.setAttribute('aria-label', S.mode === 'draw'
+    ? `Схема ${S.w} на ${S.h} клеток. Стрелки двигают курсор, пробел закрашивает клетку.`
+    : `Схема ${S.w} на ${S.h} клеток. Стрелки вверх и вниз переключают ряд.`);
+  render(); if (S.mode === 'knit') updateKnit(); save();
+}
+
+/* ---------- Рисование ---------- */
+function cellAt(e, loose) {
+  const b = cv.getBoundingClientRect();
+  let c = Math.floor(((e.clientX - b.left) * (cv.offsetWidth / b.width) - M) / cs);
+  let r = Math.floor(((e.clientY - b.top) * (cv.offsetHeight / b.height) - M) / cs);
+  if (loose) { c = clamp(c, 0, S.w - 1); r = clamp(r, 0, S.h - 1); }
+  return c < 0 || r < 0 || c >= S.w || r >= S.h ? null : { r, c };
+}
+function paint(r, c, v) {
+  S.cells[r * S.w + c] = v;
+  if (S.sym) S.cells[r * S.w + (S.w - 1 - c)] = v;
+}
+function line(a, b, v) {          // без пропусков при быстром движении
+  let { r: r0, c: c0 } = a; const { r: r1, c: c1 } = b;
+  const dc = Math.abs(c1 - c0), dr = -Math.abs(r1 - r0), sc = c0 < c1 ? 1 : -1, sr = r0 < r1 ? 1 : -1; let err = dc + dr;
+  for (;;) { paint(r0, c0, v); if (r0 === r1 && c0 === c1) break; const e2 = 2 * err; if (e2 >= dr) { err += dr; c0 += sc; } if (e2 <= dc) { err += dc; r0 += sr; } }
+}
+let stroke = null;
+cv.addEventListener('pointerdown', e => {
+  if (S.mode !== 'draw' || S.tool !== 'pen' || e.button) return;
+  const p = cellAt(e); if (!p) return;
+  e.preventDefault(); cv.setPointerCapture(e.pointerId); pushHistory();
+  // первая клетка задаёт действие: пустую закрашиваем, полную стираем
+  stroke = { v: S.cells[p.r * S.w + p.c] ? 0 : 1, last: p }; cursor = p;
+  paint(p.r, p.c, stroke.v); render();
+});
+cv.addEventListener('pointermove', e => {
+  if (!stroke) return; const p = cellAt(e, true);
+  if (p.r === stroke.last.r && p.c === stroke.last.c) return;
+  line(stroke.last, p, stroke.v); stroke.last = p; cursor = p; render();
+});
+const endStroke = () => { if (stroke) { stroke = null; afterChange(false); } };
+cv.addEventListener('pointerup', endStroke); cv.addEventListener('pointercancel', endStroke);
+cv.addEventListener('click', e => {           // в режиме «Вяжу» нажатие выбирает ряд
+  if (S.mode !== 'knit') return; const p = cellAt(e); if (p) setKnitRow(S.h - p.r);
+});
+cv.addEventListener('focus', () => { if (!cursor) cursor = { r: S.h - 1, c: S.w - 1 }; render(); });
+cv.addEventListener('blur', render);
+cv.addEventListener('keydown', e => {
+  const k = e.key;
+  if (S.mode === 'knit') {
+    if (k === 'ArrowUp' || k === ' ' || k === 'Enter') { e.preventDefault(); setKnitRow(S.knitRow + 1); }
+    else if (k === 'ArrowDown') { e.preventDefault(); setKnitRow(S.knitRow - 1); }
+    return;
+  }
+  if (!cursor) return;
+  const mv = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[k];
+  if (mv) { e.preventDefault(); cursor = { r: clamp(cursor.r + mv[0], 0, S.h - 1), c: clamp(cursor.c + mv[1], 0, S.w - 1) }; render(); }
+  else if (k === ' ' || k === 'Enter') { e.preventDefault(); pushHistory(); paint(cursor.r, cursor.c, S.cells[cursor.r * S.w + cursor.c] ? 0 : 1); afterChange(false); }
+});
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z' || document.querySelector('dialog[open]')) return;
+  e.preventDefault(); e.shiftKey ? redo() : undo();
+});
+
+/* ---------- Преобразования ---------- */
+function transform(fn) { pushHistory(); const src = S.cells, out = new Uint8Array(S.w * S.h);
+  for (let r = 0; r < S.h; r++) for (let c = 0; c < S.w; c++) out[r * S.w + c] = fn(src, r, c);
+  S.cells = out; afterChange(false); }
+$('flipH').onclick = () => transform((s, r, c) => s[r * S.w + (S.w - 1 - c)]);
+$('flipV').onclick = () => transform((s, r, c) => s[(S.h - 1 - r) * S.w + c]);
+$('invert').onclick = () => transform((s, r, c) => s[r * S.w + c] ? 0 : 1);
+$('undo').onclick = undo; $('redo').onclick = redo;
+$('clear').onclick = () => {
+  if (!S.cells.some(Boolean)) return;
+  pushHistory(); S.cells = new Uint8Array(S.w * S.h); S.knitRow = 1; afterChange(false);
+  toast('Схема очищена', 'Отменить', undo);
+};
+
+function setTool(t) { S.tool = t; $('toolPen').setAttribute('aria-pressed', t === 'pen'); $('toolHand').setAttribute('aria-pressed', t === 'hand'); syncTouch(); }
+function syncTouch() { const pan = S.mode === 'knit' || S.tool === 'hand'; cv.style.touchAction = pan ? 'auto' : 'none'; cv.classList.toggle('pan', pan); }
+$('toolPen').onclick = () => setTool('pen'); $('toolHand').onclick = () => setTool('hand');
+$('sym').onclick = () => { S.sym = !S.sym; $('sym').setAttribute('aria-pressed', S.sym); render();
+  if (S.sym) toast('Рисуй с одной стороны от пунктира: с другой появится то же самое'); };
+$('zoomIn').onclick = () => { userZoom = true; cs = clamp(cs + 4, 6, 48); render(); };
+$('zoomOut').onclick = () => { userZoom = true; cs = clamp(cs - 4, 6, 48); render(); };
+
+/* ---------- Размер полотна: тянем за край ---------- */
+function resized(base, side, d) {
+  const horiz = side === 'left' || side === 'right';
+  const nw = clamp(base.w + (horiz ? d : 0), 3, MAX), nh = clamp(base.h + (horiz ? 0 : d), 3, MAX);
+  const oc = side === 'left' ? nw - base.w : 0, or = side === 'top' ? nh - base.h : 0, out = new Uint8Array(nw * nh);
+  for (let r = 0; r < base.h; r++) for (let c = 0; c < base.w; c++) {
+    const R = r + or, C = c + oc; if (R >= 0 && C >= 0 && R < nh && C < nw) out[R * nw + C] = base.cells[r * base.w + c];
+  }
+  return { w: nw, h: nh, cells: out };
+}
+function applySize(n) { S.w = n.w; S.h = n.h; S.cells = n.cells; S.knitRow = clamp(S.knitRow, 1, n.h + 1); cursor = null; }
+const frame = $('frame'), badge = $('sizeBadge');
+let grip = null;
+function freeze(side) {      // противоположный край стоит на месте, пока тянем
+  const st = getComputedStyle(scroller), pl = parseFloat(st.paddingLeft), pt = parseFloat(st.paddingTop);
+  const f = frame.getBoundingClientRect(), s = scroller.getBoundingClientRect();
+  const L = Math.max(0, f.left - s.left + scroller.scrollLeft - pl), T = Math.max(0, f.top - s.top + scroller.scrollTop - pt);
+  const R = Math.max(0, scroller.clientWidth - pl - (f.right - s.left)), B = Math.max(0, scroller.clientHeight - pt - (f.bottom - s.top));
+  frame.style.margin = side === 'left' ? `${T}px ${R}px auto auto` : side === 'top' ? `auto auto ${B}px ${L}px` : `${T}px auto auto ${L}px`;
+}
+frame.addEventListener('pointerdown', e => {
+  const g = e.target.closest('.grip'); if (!g || e.button) return;
+  e.preventDefault(); g.setPointerCapture(e.pointerId); g.focus(); freeze(g.dataset.side); g.classList.add('drag');
+  grip = { el: g, side: g.dataset.side, x: e.clientX, y: e.clientY, base: snap(), d: 0 };
+});
+frame.addEventListener('pointermove', e => {
+  if (!grip) return;
+  const dx = e.clientX - grip.x, dy = e.clientY - grip.y, sd = grip.side;
+  const d = Math.round((sd === 'right' ? dx : sd === 'left' ? -dx : sd === 'bottom' ? dy : -dy) / cs);
+  const horiz = sd === 'left' || sd === 'right';
+  if (d !== grip.d) { grip.d = d; applySize(resized(grip.base, sd, d)); grip.n = horiz ? S.w - grip.base.w : S.h - grip.base.h; afterChange(false); }
+  const n = grip.n || 0, where = { top: 'сверху', bottom: 'снизу', left: 'слева', right: 'справа' }[sd];
+  const noun = plural(Math.abs(n), horiz ? ['столбец', 'столбца', 'столбцов'] : ['ряд', 'ряда', 'рядов']);
+  badge.hidden = false; badge.textContent = n ? `${n > 0 ? '+' : '−'}${Math.abs(n)} ${noun} ${where}, станет ${S.w} × ${S.h}` : `${S.w} × ${S.h}`;
+  badge.style.transform = `translate(${e.clientX + 14}px, ${e.clientY + 14}px)`;
+});
+function endGrip() {
+  if (!grip) return;
+  if (S.w !== grip.base.w || S.h !== grip.base.h) { undoStack.push(grip.base); if (undoStack.length > 100) undoStack.shift(); redoStack = []; syncHistory(); }
+  grip.el.classList.remove('drag'); frame.style.margin = ''; badge.hidden = true; grip = null; userZoom = false; afterChange(true);
+}
+frame.addEventListener('pointerup', endGrip); frame.addEventListener('pointercancel', endGrip);
+frame.addEventListener('keydown', e => {
+  const g = e.target.closest('.grip'); if (!g) return;
+  const d = { top: { ArrowUp: 1, ArrowDown: -1 }, bottom: { ArrowDown: 1, ArrowUp: -1 }, left: { ArrowLeft: 1, ArrowRight: -1 }, right: { ArrowRight: 1, ArrowLeft: -1 } }[g.dataset.side][e.key];
+  if (!d) return; e.preventDefault();
+  const n = resized(snap(), g.dataset.side, d); if (n.w === S.w && n.h === S.h) return;
+  pushHistory(); applySize(n); afterChange(true);
+});
+
+/* ---------- Размер ---------- */
+const dlgSize = $('dlgSize');
+const AD = { t: $('adT'), r: $('adR'), b: $('adB'), l: $('adL') };
+function sizePlan() {
+  const v = k => Math.round(+AD[k].value) || 0, p = { t: v('t'), r: v('r'), b: v('b'), l: v('l') };
+  p.w = S.w + p.l + p.r; p.h = S.h + p.t + p.b; p.ok = p.w >= 3 && p.w <= MAX && p.h >= 3 && p.h <= MAX;
+  $('sizeNew').textContent = `${p.w} × ${p.h}`; $('sizeOld').textContent = p.w === S.w && p.h === S.h ? 'как сейчас' : `сейчас ${S.w} × ${S.h}`;
+  $('sizeErr').hidden = p.ok; $('sizeOk').disabled = !p.ok;
+  return p;
+}
+Object.values(AD).forEach(el => el.addEventListener('input', sizePlan));
+$('resize').onclick = () => { Object.values(AD).forEach(el => el.value = 0); sizePlan(); dlgSize.showModal(); };
+$('sizeCancel').onclick = () => dlgSize.close();
+$('sizeOk').onclick = () => {
+  const p = sizePlan(); if (!p.ok) return;
+  if (p.t || p.r || p.b || p.l) {
+    pushHistory();
+    const out = new Uint8Array(p.w * p.h);
+    for (let r = 0; r < S.h; r++) for (let c = 0; c < S.w; c++) {
+      const R = r + p.t, C = c + p.l; if (R >= 0 && C >= 0 && R < p.h && C < p.w) out[R * p.w + C] = S.cells[r * S.w + c];
+    }
+    applySize({ w: p.w, h: p.h, cells: out }); userZoom = false; afterChange(true);
+  }
+  dlgSize.close();
+};
+
+/* ---------- Схема из картинки ---------- */
+// Алгоритм: яркость с учётом прозрачности → порог по Оцу как стартовое значение →
+// обрезка полей → средняя яркость по площади каждой клетки (а не одна точка) → чистка одиночных клеток.
+const dlgImg = $('dlgImg'), pv = $('pv');
+let src = null, result = null;       // src: {w,h,L}; result: {w,h,cells}
+function resetImg() { src = result = null; $('imgControls').hidden = true; $('imgOk').disabled = true; $('imgErr').hidden = true;
+  $('dropText').textContent = 'Выбери файл или перетащи его сюда'; $('file').value = ''; }
+$('fromImage').onclick = () => { resetImg(); dlgImg.showModal(); };
+$('imgCancel').onclick = () => dlgImg.close();
+function imgError(t) { $('imgErr').textContent = t; $('imgErr').hidden = false; $('dropText').textContent = 'Выбери другой файл'; }
+async function decode(file) {
+  if (window.createImageBitmap) { try { return await createImageBitmap(file); } catch (e) {} }
+  const url = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+  return await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+}
+async function takeFile(file) {
+  if (!file) return;
+  $('imgErr').hidden = true;
+  if (!/^image\//.test(file.type)) { imgError('Это не картинка. Подойдёт PNG, JPG или WebP.'); return; }
+  $('dropText').textContent = 'Читаю картинку…';
+  let im; try { im = await decode(file); } catch (e) { imgError('Не получилось открыть файл. Подойдёт PNG, JPG или WebP.'); return; }
+  const k = Math.min(1, 900 / Math.max(im.width, im.height)), w = Math.max(1, Math.round(im.width * k)), h = Math.max(1, Math.round(im.height * k));
+  const t = document.createElement('canvas'); t.width = w; t.height = h;
+  const x = t.getContext('2d', { willReadFrequently: true }); x.drawImage(im, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, L = new Uint8Array(w * h), hist = new Uint32Array(256);
+  for (let i = 0; i < w * h; i++) {
+    const a = d[i * 4 + 3] / 255, l = (.299 * d[i * 4] + .587 * d[i * 4 + 1] + .114 * d[i * 4 + 2]) * a + 255 * (1 - a);
+    L[i] = l; hist[L[i]]++;
+  }
+  // порог Оцу
+  let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sb = 0, wb = 0, best = 0, thr = 128; const tot = w * h;
+  for (let i = 0; i < 256; i++) { wb += hist[i]; if (!wb) continue; const wf = tot - wb; if (!wf) break; sb += i * hist[i];
+    const mb = sb / wb, mf = (sum - sb) / wf, v = wb * wf * (mb - mf) * (mb - mf); if (v > best) { best = v; thr = i; } }
+  src = { w, h, L };
+  $('imT').value = clamp(thr + 1, 1, 254); $('imInv').checked = false;
+  $('dropText').textContent = file.name; $('imgControls').hidden = false; $('imgOk').disabled = false;
+  compute();
+}
+function compute() {
+  if (!src) return;
+  const { w, h, L } = src, thr = +$('imT').value, inv = $('imInv').checked, gw = +$('imW').value;
+  const fg = l => (l < thr) !== inv;
+  let x0 = 0, y0 = 0, x1 = w, y1 = h;
+  if ($('imTrim').checked) {
+    let a = w, b = h, c = -1, d = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (fg(L[y * w + x])) { if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > d) d = y; }
+    if (c >= a && d >= b) { x0 = a; y0 = b; x1 = c + 1; y1 = d + 1; }
+  }
+  const bw = x1 - x0, bh = y1 - y0, gh = clamp(Math.round(gw * bh / bw), 1, MAX), cells = new Uint8Array(gw * gh);
+  for (let r = 0; r < gh; r++) for (let c = 0; c < gw; c++) {
+    const xa = Math.floor(x0 + c * bw / gw), xb = Math.max(xa + 1, Math.floor(x0 + (c + 1) * bw / gw));
+    const ya = Math.floor(y0 + r * bh / gh), yb = Math.max(ya + 1, Math.floor(y0 + (r + 1) * bh / gh));
+    let s = 0, n = 0;
+    for (let y = ya; y < yb && y < h; y++) for (let x = xa; x < xb && x < w; x++) { s += L[y * w + x]; n++; }
+    cells[r * gw + c] = n && fg(s / n) ? 1 : 0;
+  }
+  if ($('imClean').checked) {
+    const at = (r, c) => r >= 0 && c >= 0 && r < gh && c < gw ? cells[r * gw + c] : 0, out = cells.slice();
+    for (let r = 0; r < gh; r++) for (let c = 0; c < gw; c++) {
+      let n8 = 0; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (i || j) n8 += at(r + i, c + j);
+      const n4 = at(r - 1, c) + at(r + 1, c) + at(r, c - 1) + at(r, c + 1);
+      if (cells[r * gw + c] && n8 === 0) out[r * gw + c] = 0;        // одинокая полная клетка
+      else if (!cells[r * gw + c] && n4 === 4) out[r * gw + c] = 1;  // одинокая дырка
+    }
+    cells.set(out);
+  }
+  result = { w: gw, h: gh, cells };
+  $('imWo').textContent = gw; $('imTo').textContent = thr;
+  const s = Math.max(2, Math.floor(Math.min(300 / gw, 260 / gh)));
+  pv.width = gw * s; pv.height = gh * s; const x = pv.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, pv.width, pv.height); x.fillStyle = '#131C3A';
+  for (let r = 0; r < gh; r++) for (let c = 0; c < gw; c++) if (cells[r * gw + c]) x.fillRect(c * s, r * s, s, s);
+  x.fillStyle = 'rgba(19,28,58,.12)';
+  if (s >= 4) { for (let c = 1; c < gw; c++) x.fillRect(c * s, 0, 1, pv.height); for (let r = 1; r < gh; r++) x.fillRect(0, r * s, pv.width, 1); }
+  pv.setAttribute('aria-label', `Предпросмотр: ${gw} на ${gh} клеток`);
+  $('imgOk').textContent = `Сделать схему ${gw} × ${gh}`;
+}
+$('file').onchange = e => takeFile(e.target.files[0]);
+['imW', 'imT'].forEach(id => $(id).oninput = compute);
+['imInv', 'imTrim', 'imClean'].forEach(id => $(id).onchange = compute);
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(n => drop.addEventListener(n, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
+$('imgOk').onclick = () => {
+  if (!result) return;
+  pushHistory(); S.w = result.w; S.h = result.h; S.cells = result.cells; S.knitRow = 1; userZoom = false; cursor = null;
+  dlgImg.close(); afterChange(true); toast('Схема из картинки готова', 'Отменить', undo);
+};
+
+/* ---------- Схема из текста ---------- */
+// Текст рисуется крупно (K пикселей на клетку), клетка считается полной, если буква покрывает её
+// больше порога. Сетка привязана к базовой линии, поэтому пиксельный шрифт ложится клетка в клетку.
+const FONTS = [
+  { n: 'Golos Text', w: 600, l: 'простой' }, { n: 'Rubik Mono One', w: 400, l: 'блочный' },
+  { n: 'Playfair Display', w: 700, l: 'с засечками' }, { n: 'Kelly Slab', w: 400, l: 'брусковый' },
+  { n: 'Lobster', w: 400, l: 'леттеринг' }, { n: 'Pacifico', w: 400, l: 'кисть' },
+  { n: 'Ruslan Display', w: 400, l: 'вязь' }, { n: 'Press Start 2P', w: 400, l: 'пиксельный', grid: 8 }];
+const dlgTxt = $('dlgTxt'), tpv = $('tpv');
+let txFont = 0, txRes = null, txTok = 0, txTimer;
+function buildFonts() {
+  const box = $('fonts'); box.textContent = '';
+  FONTS.forEach((f, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', i === txFont); b.setAttribute('aria-label', `${f.n}, ${f.l}`);
+    const s = document.createElement('b'); s.textContent = 'Аб Ab'; s.style.fontFamily = `"${f.n}", sans-serif`; s.style.fontWeight = f.w; s.style.fontSize = f.grid ? '11px' : '18px';
+    const t = document.createElement('small'); t.textContent = f.l; b.append(s, t);
+    b.onclick = () => { txFont = i; buildFonts(); computeText(); };
+    box.appendChild(b);
+  });
+  // свой шрифт из файла: живёт до перезагрузки страницы
+  const add = document.createElement('button'); add.type = 'button';
+  const p = document.createElement('b'); p.textContent = '+'; const t = document.createElement('small'); t.textContent = 'свой шрифт'; add.append(p, t);
+  add.onclick = () => $('fontFile').click(); box.appendChild(add);
+}
+let userFonts = 0;
+$('fontFile').onchange = async e => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  try {
+    const name = 'UserFont' + (++userFonts), face = new FontFace(name, await file.arrayBuffer());
+    await face.load(); document.fonts.add(face);
+    FONTS.push({ n: name, w: 400, l: file.name.replace(/\.[^.]+$/, '').slice(0, 14) }); txFont = FONTS.length - 1; buildFonts(); computeText();
+  } catch (err) { $('txErr').textContent = 'Не получилось прочитать шрифт. Подойдёт файл TTF, OTF или WOFF.'; $('txErr').hidden = false; }
+};
+buildFonts();
+function drawPreview(canvas, res) {
+  const s = Math.max(2, Math.floor(Math.min(380 / res.w, 220 / res.h, 16)));
+  canvas.width = res.w * s; canvas.height = res.h * s; const x = canvas.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, canvas.width, canvas.height); x.fillStyle = '#131C3A';
+  for (let r = 0; r < res.h; r++) for (let c = 0; c < res.w; c++) if (res.cells[r * res.w + c]) x.fillRect(c * s, r * s, s, s);
+  x.fillStyle = 'rgba(19,28,58,.12)';
+  if (s >= 4) { for (let c = 1; c < res.w; c++) x.fillRect(c * s, 0, 1, canvas.height); for (let r = 1; r < res.h; r++) x.fillRect(0, r * s, canvas.width, 1); }
+  canvas.setAttribute('aria-label', `Предпросмотр: ${res.w} на ${res.h} клеток`);
+}
+function txFail(msg) { txRes = null; tpv.hidden = true; $('txEmpty').hidden = !!msg; $('txOk').disabled = true; $('txOk').textContent = 'Сделать схему';
+  if (msg) { $('txErr').textContent = msg; $('txErr').hidden = false; } }
+async function computeText() {
+  const tok = ++txTok, f = FONTS[txFont], raw = $('txIn').value, lines = raw.split('\n').map(s => s.trimEnd());
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  let fs = +$('txS').value; if (f.grid) fs = Math.max(f.grid, Math.round(fs / f.grid) * f.grid);
+  $('txSo').textContent = fs; $('txPo').textContent = $('txP').value; $('txWrow').hidden = !!f.grid;
+  $('txErr').hidden = true;
+  const note = $('txNote'); note.hidden = !f.grid; if (f.grid) note.textContent = 'Пиксельный шрифт ложится в клетки точно при размере 8, 16, 24 и так далее, поэтому ползунок шагает по восемь.';
+  if (!lines.some(s => s.trim())) { txFail(''); return; }
+  const spec = `${f.w} 64px "${f.n}"`;
+  try { await Promise.race([document.fonts.load(spec, raw), new Promise(r => setTimeout(r, 4000))]); } catch (e) {}
+  if (tok !== txTok) return;
+  if (!document.fonts.check(spec, raw)) { note.hidden = false; note.textContent = 'Шрифт не загрузился: похоже, нет интернета. Показываю запасной.'; }
+  const t = document.createElement('canvas'), x = t.getContext('2d', { willReadFrequently: true });
+  const font = k => `${f.w} ${fs * k}px "${f.n}", "Golos Text", sans-serif`, widest = () => Math.max(...lines.map(s => x.measureText(s).width));
+  let K = 8; x.font = font(K); let maxW = widest();
+  if (maxW + 2 * fs * K > 12000) { K = 4; x.font = font(K); maxW = widest(); }
+  if (maxW / K > 400) { txFail('Надпись слишком длинная. Уменьши размер букв или сократи текст.'); return; }
+  const pad = fs * K, lh = (f.grid ? fs + 2 : Math.round(fs * 1.05)) * K;
+  t.width = Math.ceil((maxW + 2 * pad) / K) * K; t.height = lines.length * lh + 2 * pad;
+  x.font = font(K); x.textBaseline = 'alphabetic'; x.fillStyle = '#000';
+  lines.forEach((s, i) => { const lw = x.measureText(s).width; x.fillText(s, pad + Math.round((maxW - lw) / 2 / K) * K, pad + i * lh + fs * K); });
+  const d = x.getImageData(0, 0, t.width, t.height).data, gw = t.width / K, gh = t.height / K;
+  const need = (f.grid ? .5 : 1 - (+$('txW').value) / 100) * K * K * 255, g = new Uint8Array(gw * gh);
+  let a = gw, b = gh, c1 = -1, d1 = -1;
+  for (let r = 0; r < gh; r++) for (let c = 0; c < gw; c++) {
+    let sum = 0; for (let y = 0; y < K; y++) { let o = ((r * K + y) * t.width + c * K) * 4 + 3; for (let i = 0; i < K; i++, o += 4) sum += d[o]; }
+    if (sum >= need) { g[r * gw + c] = 1; if (c < a) a = c; if (c > c1) c1 = c; if (r < b) b = r; if (r > d1) d1 = r; }
+  }
+  if (c1 < 0) { txFail('При таком размере буквы не читаются. Увеличь размер или толщину линий.'); return; }
+  const p = +$('txP').value, w = c1 - a + 1 + 2 * p, h = d1 - b + 1 + 2 * p;
+  if (w > MAX || h > MAX) { txFail(`Получается ${w} × ${h} клеток, а максимум ${MAX}. Уменьши размер букв или сократи текст.`); return; }
+  const cells = new Uint8Array(w * h);
+  for (let r = b; r <= d1; r++) for (let c = a; c <= c1; c++) cells[(r - b + p) * w + (c - a + p)] = g[r * gw + c];
+  txRes = { w, h, cells }; drawPreview(tpv, txRes); tpv.hidden = false; $('txEmpty').hidden = true;
+  $('txOk').disabled = false; $('txOk').textContent = `Сделать схему ${w} × ${h}`;
+}
+const txSchedule = () => { clearTimeout(txTimer); txTimer = setTimeout(computeText, 120); };
+['txIn', 'txS', 'txW', 'txP'].forEach(id => $(id).addEventListener('input', txSchedule));
+$('fromText').onclick = () => { dlgTxt.showModal(); computeText(); };
+$('txCancel').onclick = () => dlgTxt.close();
+$('txOk').onclick = () => {
+  if (!txRes) return;
+  pushHistory(); S.w = txRes.w; S.h = txRes.h; S.cells = txRes.cells.slice(); S.knitRow = 1; userZoom = false; cursor = null;
+  dlgTxt.close(); afterChange(true); toast('Схема из текста готова', 'Отменить', undo);
+};
+
+/* ---------- Скачивание ---------- */
+// Внутри claude.ai файл отдаёт возможность downloads; на своём хостинге работает обычная ссылка.
+let dl; const hosted = !!(window.claude && window.claude.use);
+if (hosted) window.claude.use('downloads').then(d => { dl = d; if (!d) $('exportPng').hidden = true; });
+$('exportPng').onclick = async () => {
+  const c = document.createElement('canvas'), size = clamp(Math.floor(3600 / Math.max(S.w, S.h)), 8, 28);
+  const keep = S.mode; S.mode = 'draw';
+  drawChart(c, { size, pal: PRINT, mirrored: false, knit: 0, dpr: 2 }); S.mode = keep;
+  const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+  const filename = `filet-${S.w}x${S.h}.png`;
+  if (hosted) {
+    if (!dl) return;
+    try { await dl.save({ filename, data: blob }); toast('PNG сохранён'); }
+    catch (e) { if (e && e.code !== 'declined') toast('Не получилось сохранить файл. Попробуй ещё раз.'); }
+  } else {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+};
+
+/* ---------- Режим «Вяжу» ---------- */
+function runsFor(k) {
+  const r = S.h - k, rtl = rowIsRTL(k), out = [];
+  for (let i = 0; i < S.w; i++) {
+    const v = S.cells[r * S.w + (rtl ? S.w - 1 - i : i)];
+    if (out.length && out[out.length - 1].v === v) out[out.length - 1].n++; else out.push({ v, n: 1 });
+  }
+  return out;
+}
+function updateKnit() {
+  const k = S.knitRow, done = k > S.h, base = S.ltrFirst ? 'слева направо' : 'справа налево', opp = S.ltrFirst ? 'справа налево' : 'слева направо';
+  const runs = $('runs'); runs.textContent = '';
+  if (done) {
+    $('rowNum').textContent = 'Готово'; $('rowOf').textContent = '';
+    $('dirText').textContent = `${S.h} ${plural(S.h, ['ряд', 'ряда', 'рядов'])} позади.`;
+    $('legend').textContent = ''; $('rowNext').textContent = 'Начать сначала';
+  } else {
+    $('rowNum').textContent = `Ряд ${k}`; $('rowOf').textContent = `из ${S.h}`;
+    $('dirText').textContent = k % 2 === 1 ? `Прямой ряд. Читай ${base}.`
+      : S.autoFlip ? `Обратный ряд. Схема отражена, читай так же ${base}.`
+      : `Обратный ряд. Читай ${opp}.`;
+    let f = 0, e = 0;
+    for (const run of runsFor(k)) {
+      const li = document.createElement('li'); li.className = run.v ? 'f' : 'e'; li.textContent = run.n;
+      li.setAttribute('aria-label', run.v ? `${run.n} ${plural(run.n, ['полная', 'полные', 'полных'])}` : `${run.n} ${plural(run.n, ['пустая', 'пустые', 'пустых'])}`);
+      runs.appendChild(li); run.v ? f += run.n : e += run.n;
+    }
+    $('legend').textContent = S.cells.some(Boolean)
+      ? `По порядку вязания. Сплошные плашки: полные клетки (${f}), пунктирные: пустые (${e}).`
+      : 'В схеме пока нет закрашенных клеток. Нарисуй узор в режиме «Рисую».';
+    $('rowNext').textContent = 'Ряд готов';
+  }
+  $('rowPrev').disabled = k <= 1;
+}
+function keepRowVisible() {
+  const y = M + (S.h - Math.min(S.knitRow, S.h)) * cs, top = cv.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  const a = top + y - cs * 2, b = top + y + cs * 3;
+  if (a < scroller.scrollTop) scroller.scrollTop = Math.max(0, a);
+  else if (b > scroller.scrollTop + scroller.clientHeight) scroller.scrollTop = b - scroller.clientHeight;
+}
+let flipping = false;
+async function setKnitRow(k) {
+  k = clamp(k, 1, S.h + 1); if (k === S.knitRow || flipping) return;
+  const was = isMirrored(); S.knitRow = k; const now = isMirrored();
+  updateKnit(); save();
+  if (was !== now && !reduced && flipper.animate) {
+    // переворот полотна: схема складывается и раскрывается уже отражённой
+    flipping = true;
+    try { await flipper.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: 130, easing: 'ease-in' }).finished; } catch (e) {}
+    render();
+    try { await flipper.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 170, easing: 'ease-out' }).finished; } catch (e) {}
+    flipping = false;
+  } else render();
+  keepRowVisible();
+}
+$('rowNext').onclick = () => S.knitRow > S.h ? setKnitRow(1) : setKnitRow(S.knitRow + 1);
+$('rowPrev').onclick = () => setKnitRow(S.knitRow - 1);
+$('autoFlip').onchange = e => { S.autoFlip = e.target.checked; afterChange(false); };
+$('ltrFirst').onchange = e => { S.ltrFirst = e.target.checked; afterChange(false); };
+
+function setMode(m) {
+  S.mode = m;
+  $('modeDraw').setAttribute('aria-pressed', m === 'draw'); $('modeKnit').setAttribute('aria-pressed', m === 'knit');
+  $('tools').hidden = m !== 'draw'; $('knitPanel').hidden = m !== 'knit';
+  $('hint').hidden = m !== 'draw' || S.hintSeen; $('frame').classList.toggle('noedge', m !== 'draw');
+  syncTouch(); userZoom = false; afterChange(true); if (m === 'knit') keepRowVisible();
+}
+$('modeDraw').onclick = () => setMode('draw'); $('modeKnit').onclick = () => setMode('knit');
+
+/* ---------- Подсказка первого запуска, тосты ---------- */
+function closeHint() { S.hintSeen = true; $('hint').hidden = true; save(); fit(); render(); }
+$('hintOk').onclick = closeHint;
+$('hintClear').onclick = () => { pushHistory(); S.cells = new Uint8Array(S.w * S.h); S.knitRow = 1; closeHint(); afterChange(false); };
+let toastT;
+function toast(text, act, fn) {
+  $('toastText').textContent = text; const b = $('toastAct'); b.hidden = !act;
+  if (act) { b.textContent = act; b.onclick = () => { fn(); $('toast').classList.remove('show'); }; }
+  $('toast').classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => $('toast').classList.remove('show'), 4500);
+}
+
+/* ---------- Запуск ---------- */
+load();
+$('autoFlip').checked = S.autoFlip; $('ltrFirst').checked = S.ltrFirst;
+setMode(S.mode);
+addEventListener('resize', () => { fit(); render(); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+})();
+</script>
+</body>
+</html>
